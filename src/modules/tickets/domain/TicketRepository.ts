@@ -1,0 +1,9 @@
+import { Ticket } from './Ticket';
+
+export interface TicketRepository {
+  criar(ticket: Ticket): Promise<void>;
+  buscarPorId(id: string): Promise<Ticket | null>;
+  buscarPorIdComLock(id: string): Promise<Ticket | null>;
+  atualizar(ticket: Ticket): Promise<void>;
+}
+
