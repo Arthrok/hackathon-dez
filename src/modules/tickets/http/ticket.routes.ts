@@ -48,15 +48,30 @@ ticketRouter.get('/ticket-tipos', (req, res) => {
  *           schema:
  *             type: object
  *             properties:
- *               tipoId:
+ *               tipoHoras:
  *                 type: integer
- *                 example: 1
- *               valor:
- *                 type: number
- *                 example: 100.00
+ *                 example: 2
+ *               timestampEntrada:
+ *                 type: string
+ *                 example: "2016-09-01T00:00:00-03:00"
+ *               placaDoCarro:
+ *                 type: string
+ *                 example: "ABC1E23"
  *     responses:
  *       201:
  *         description: Ticket criado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               example:
+ *                 id: "85205d19-cd52-4f8c-bc21-2d0b19677881"
+ *                 status: "ABERTO"
+ *                 valorOriginal: 11.5
+ *                 valorAtual: 11.5
+ *                 timestampEntrada: "2016-09-01T03:00:00.000Z"
+ *                 timestampSaida: "2016-09-01T05:00:00.000Z"
+ *                 placaDoCarro: "ABC1E23"
  */
 ticketRouter.post('/tickets', (req, res) => {
   void TicketController.criar(req, res);
@@ -78,6 +93,19 @@ ticketRouter.post('/tickets', (req, res) => {
  *     responses:
  *       200:
  *         description: Detalhes do ticket
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               example:
+ *                 id: "85205d19-cd52-4f8c-bc21-2d0b19677881"
+ *                 status: "ABERTO"
+ *                 valorOriginal: 11.5
+ *                 valorAtual: 0
+ *                 timestampEntrada: "2016-09-01T03:00:00.000Z"
+ *                 timestampSaida: "2016-09-01T05:00:00.000Z"
+ *                 placaDoCarro: "ABC1E23"
+ *                 criadoEm: "2025-12-17T19:40:23.378Z"
  *       404:
  *         description: Ticket não encontrado
  */
@@ -107,15 +135,23 @@ ticketRouter.get('/tickets/:id', (req, res) => {
  *           schema:
  *             type: object
  *             properties:
- *               codigo:
+ *               chave:
  *                 type: string
- *                 example: "DESC10"
- *               valor:
- *                 type: number
- *                 example: 10.00
+ *                 example: "53160911510448000171550010000106771000187760"
  *     responses:
  *       200:
  *         description: Desconto aplicado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               example:
+ *                 ticketId: "85205d19-cd52-4f8c-bc21-2d0b19677881"
+ *                 nfChave: "53160911510448000171550010000106771000187760"
+ *                 valorNf: 16537.92
+ *                 descontoAplicado: 1653.79
+ *                 valorTicketAntes: 11.5
+ *                 valorTicketDepois: 0
  */
 ticketRouter.post('/tickets/:id/descontos', (req, res) => {
   void TicketDescontoController.aplicar(req, res);
@@ -185,6 +221,12 @@ ticketRouter.get('/tickets/:id/pagamento', (req, res) => {
  *           type: string
  *         required: true
  *         description: ID do ticket
+ *       - in: header
+ *         name: idempotency-key
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Chave de idempotência
  *     requestBody:
  *       required: true
  *       content:
@@ -194,10 +236,27 @@ ticketRouter.get('/tickets/:id/pagamento', (req, res) => {
  *             properties:
  *               metodo:
  *                 type: string
- *                 example: "CREDITO"
+ *                 enum: [pix, cartao, dinheiro]
+ *                 example: "cartao"
  *     responses:
- *       200:
+ *       201:
  *         description: Pagamento processado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               example:
+ *                 ticketId: "85205d19-cd52-4f8c-bc21-2d0b19677881"
+ *                 status: "PAGO"
+ *                 valorPago: 11.5
+ *                 metodo: "cartao"
+ *                 dataPagamento: "2025-12-17T19:40:23.378Z"
+ *       400:
+ *         description: Dados inválidos
+ *       404:
+ *         description: Ticket não encontrado
+ *       409:
+ *         description: Ticket não está aberto
  */
 ticketRouter.post('/tickets/:id/pagamento', (req, res) => {
   void TicketPagamentoController.processar(req, res);
