@@ -1,0 +1,11 @@
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS nota_fiscal (
+  id UUID PRIMARY KEY,
+  numero TEXT NOT NULL,
+  emitente TEXT NOT NULL,
+  valor_total NUMERIC NOT NULL,
+  criada_em TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
