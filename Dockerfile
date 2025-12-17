@@ -8,7 +8,8 @@ COPY package.json package-lock.json* ./
 # Force development env for build
 ENV NODE_ENV=development
 
-RUN npm ci
+RUN npm install
+RUN npm install -g typescript
 
 COPY tsconfig.json ./tsconfig.json
 COPY src ./src
