@@ -195,4 +195,45 @@ SELECT * FROM ceps_scs;
 4. Idempotência: pagamentos suportam `Idempotency-Key` no header.
 5. Cálculo de desconto: `round(valor_nf * 0.10, 2)`.
 
-Pronto. Todos os arquivos foram criados e o projeto está funcional. Teste com os curls acima.
+
+## **7) Documentação da API (Rotas e Parâmetros)**
+
+### **Auth** (`/auth`)
+| Método | Rota | Descrição | Parâmetros (Body/Query) |
+|---|---|---|---|
+| POST | `/auth/register` | Cadastra novo usuário | **Body (JSON):**<br>- `nome` (Obrigatório)<br>- `email` (Obrigatório)<br>- `senha` (Obrigatório)<br>- `celular` (Obrigatório)<br>- `cpf` (Obrigatório)<br>- `placaDoCarro` (Opcional - para cadastro simultâneo de veículo) |
+| POST | `/auth/login` | Realiza login | **Body (JSON):**<br>- `email` (Obrigatório)<br>- `senha` (Obrigatório) |
+
+### **Usuários** (`/` e `/me`)
+*Necessita Header `Authorization: Bearer <token>`*
+
+| Método | Rota | Descrição | Parâmetros |
+|---|---|---|---|
+| GET | `/me` | Dados do usuário logado | - |
+| GET | `/me/tickets` | Histórico de tickets | **Query Params:**<br>- `status` (Opcional: ABERTO, PAGO, CANCELADO)<br>- `limit` (Opcional: default 20)<br>- `offset` (Opcional: default 0) |
+| GET | `/me/tickets/ativo` | Busca ticket ativo (se houver) | - |
+
+### **Créditos** (`/me/creditos`)
+*Necessita Header `Authorization: Bearer <token>`*
+
+| Método | Rota | Descrição | Parâmetros |
+|---|---|---|---|
+| POST | `/me/creditos` | Adiciona crédito (Simulação) | **Body (JSON):**<br>- `valor` (Obrigatório: number)<br>- `descricao` (Opcional: string) |
+| GET | `/me/creditos` | Saldo e extrato | - |
+
+### **Tickets** (`/` e `/tickets`)
+| Método | Rota | Descrição | Parâmetros |
+|---|---|---|---|
+| GET | `/ticket-tipos` | Lista tipos (1h to 4h) | - |
+| POST | `/tickets` | Cria um novo ticket | *Auth Obrigatória*<br>**Body (JSON):**<br>- `tipoHoras` (Obrigatório: 1-4)<br>- `timestampEntrada` (Obrigatório: ISO8601)<br>- `placaDoCarro` (Opcional se usuário já tiver veículo)<br>- `usarCredito` (Obrigatório: boolean) |
+| GET | `/tickets/:id` | Detalhes do ticket | *Auth Obrigatória*<br>**Path:** `id` (UUID) |
+| POST | `/tickets/:id/descontos` | Aplica desconto via NF | *Auth Obrigatória*<br>**Path:** `id`<br>**Body (JSON):**<br>- `chave` (Obrigatório: 44 dígitos string) |
+| GET | `/tickets/:id/descontos` | Lista descontos do ticket | *Auth Obrigatória*<br>**Path:** `id` |
+| GET | `/tickets/:id/pagamento` | Status pagamento | *Auth Obrigatória*<br>**Path:** `id` |
+| POST | `/tickets/:id/pagamento` | Processa pagamento | *Auth Obrigatória*<br>**Path:** `id`<br>**Body (JSON):**<br>- `metodo` (Obrigatório: 'cartao', 'pix', 'dinheiro')<br>**Header:** `Idempotency-Key` (Opcional) |
+
+### **Nota Fiscal** (`/nota-fiscal`)
+| Método | Rota | Descrição | Parâmetros |
+|---|---|---|---|
+| POST | `/nota-fiscal` | Cria NF (Mock) | **Body (JSON):**<br>- `valor` (Obrigatório)<br>- `clienteId` (Opcional) |
+| GET | `/nota-fiscal/:id` | Busca NF | **Path:** `id` |
