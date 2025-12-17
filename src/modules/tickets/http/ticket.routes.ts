@@ -3,44 +3,44 @@ import { TicketTipoController } from './TicketTipoController';
 import { TicketController } from './TicketController';
 import { TicketDescontoController } from './TicketDescontoController';
 import { TicketPagamentoController } from './TicketPagamentoController';
+import { ensureAuthenticated } from '../../../shared/infra/http/middleware/ensureAuthenticated';
 
 const ticketRouter = Router();
 
-// Tipos de ticket
+// Public Routes
+/**
+ * @swagger
+ * tags:
+ *   name: Tickets
+ *   description: Gerenciamento de tickets de estacionamento
+ */
+
+// Public Routes
 /**
  * @swagger
  * /ticket-tipos:
  *   get:
- *     summary: Lista os tipos de ticket disponíveis
+ *     summary: Lista tipos de tickets disponíveis
  *     tags: [Tickets]
  *     responses:
  *       200:
- *         description: Lista de tipos de ticket retornada com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: integer
- *                     example: 1
- *                   descricao:
- *                     type: string
- *                     example: "Ingresso Inteira"
+ *         description: Lista de tipos
  */
 ticketRouter.get('/ticket-tipos', (req, res) => {
   void TicketTipoController.listar(req, res);
 });
 
-// Tickets
+// Protected Routes
+ticketRouter.use('/tickets', ensureAuthenticated);
+
 /**
  * @swagger
  * /tickets:
  *   post:
  *     summary: Cria um novo ticket
  *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -53,25 +53,19 @@ ticketRouter.get('/ticket-tipos', (req, res) => {
  *                 example: 2
  *               timestampEntrada:
  *                 type: string
- *                 example: "2016-09-01T00:00:00-03:00"
+ *                 format: date-time
+ *                 example: "2016-09-11T11:00:00-03:00"
  *               placaDoCarro:
  *                 type: string
  *                 example: "ABC1E23"
+ *               usarCredito:
+ *                 type: boolean
+ *                 example: false
  *     responses:
  *       201:
- *         description: Ticket criado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               example:
- *                 id: "85205d19-cd52-4f8c-bc21-2d0b19677881"
- *                 status: "ABERTO"
- *                 valorOriginal: 11.5
- *                 valorAtual: 11.5
- *                 timestampEntrada: "2016-09-01T03:00:00.000Z"
- *                 timestampSaida: "2016-09-01T05:00:00.000Z"
- *                 placaDoCarro: "ABC1E23"
+ *         description: Ticket criado
+ *       400:
+ *         description: Erro de validação
  */
 ticketRouter.post('/tickets', (req, res) => {
   void TicketController.criar(req, res);
@@ -81,53 +75,41 @@ ticketRouter.post('/tickets', (req, res) => {
  * @swagger
  * /tickets/{id}:
  *   get:
- *     summary: Busca um ticket por ID
+ *     summary: Busca ticket por ID
  *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
+ *         required: true
  *         schema:
  *           type: string
- *         required: true
  *         description: ID do ticket
  *     responses:
  *       200:
  *         description: Detalhes do ticket
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               example:
- *                 id: "85205d19-cd52-4f8c-bc21-2d0b19677881"
- *                 status: "ABERTO"
- *                 valorOriginal: 11.5
- *                 valorAtual: 0
- *                 timestampEntrada: "2016-09-01T03:00:00.000Z"
- *                 timestampSaida: "2016-09-01T05:00:00.000Z"
- *                 placaDoCarro: "ABC1E23"
- *                 criadoEm: "2025-12-17T19:40:23.378Z"
  *       404:
  *         description: Ticket não encontrado
  */
-
 ticketRouter.get('/tickets/:id', (req, res) => {
   void TicketController.buscarPorId(req, res);
 });
 
-// Descontos
 /**
  * @swagger
  * /tickets/{id}/descontos:
  *   post:
- *     summary: Aplica um desconto a um ticket
+ *     summary: Aplica desconto via Nota Fiscal
  *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
+ *         required: true
  *         schema:
  *           type: string
- *         required: true
- *         description: ID do ticket
  *     requestBody:
  *       required: true
  *       content:
@@ -137,21 +119,15 @@ ticketRouter.get('/tickets/:id', (req, res) => {
  *             properties:
  *               chave:
  *                 type: string
+ *                 description: Chave de 44 dígitos da NF
  *                 example: "53160911510448000171550010000106771000187760"
  *     responses:
- *       200:
+ *       201:
  *         description: Desconto aplicado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               example:
- *                 ticketId: "85205d19-cd52-4f8c-bc21-2d0b19677881"
- *                 nfChave: "53160911510448000171550010000106771000187760"
- *                 valorNf: 16537.92
- *                 descontoAplicado: 1653.79
- *                 valorTicketAntes: 11.5
- *                 valorTicketDepois: 0
+ *       400:
+ *         description: CEP inválido ou regra de negócio
+ *       409:
+ *         description: NF já usada ou data inválida
  */
 ticketRouter.post('/tickets/:id/descontos', (req, res) => {
   void TicketDescontoController.aplicar(req, res);
@@ -161,48 +137,41 @@ ticketRouter.post('/tickets/:id/descontos', (req, res) => {
  * @swagger
  * /tickets/{id}/descontos:
  *   get:
- *     summary: Lista os descontos de um ticket
+ *     summary: Lista descontos aplicados ao ticket
  *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
+ *         required: true
  *         schema:
  *           type: string
- *         required: true
- *         description: ID do ticket
  *     responses:
  *       200:
- *         description: Lista de descontos
+ *         description: Lista de descontos history
  */
 ticketRouter.get('/tickets/:id/descontos', (req, res) => {
   void TicketDescontoController.listar(req, res);
 });
 
-// Pagamentos
 /**
  * @swagger
  * /tickets/{id}/pagamento:
  *   get:
- *     summary: Consulta o status de pagamento de um ticket
+ *     summary: Consulta status de pagamento
  *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
+ *         required: true
  *         schema:
  *           type: string
- *         required: true
- *         description: ID do ticket
  *     responses:
  *       200:
  *         description: Status do pagamento
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   example: "PAGO"
  */
 ticketRouter.get('/tickets/:id/pagamento', (req, res) => {
   void TicketPagamentoController.consultar(req, res);
@@ -212,21 +181,16 @@ ticketRouter.get('/tickets/:id/pagamento', (req, res) => {
  * @swagger
  * /tickets/{id}/pagamento:
  *   post:
- *     summary: Processa o pagamento de um ticket
+ *     summary: Processa pagamento do ticket
  *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
- *         schema:
- *           type: string
  *         required: true
- *         description: ID do ticket
- *       - in: header
- *         name: idempotency-key
  *         schema:
  *           type: string
- *         required: false
- *         description: Chave de idempotência
  *     requestBody:
  *       required: true
  *       content:
@@ -236,31 +200,14 @@ ticketRouter.get('/tickets/:id/pagamento', (req, res) => {
  *             properties:
  *               metodo:
  *                 type: string
- *                 enum: [pix, cartao, dinheiro]
- *                 example: "cartao"
+ *                 enum: [cartao, pix, dinheiro]
+ *                 example: cartao
  *     responses:
  *       201:
- *         description: Pagamento processado com sucesso
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               example:
- *                 ticketId: "85205d19-cd52-4f8c-bc21-2d0b19677881"
- *                 status: "PAGO"
- *                 valorPago: 11.5
- *                 metodo: "cartao"
- *                 dataPagamento: "2025-12-17T19:40:23.378Z"
- *       400:
- *         description: Dados inválidos
- *       404:
- *         description: Ticket não encontrado
- *       409:
- *         description: Ticket não está aberto
+ *         description: Pagamento realizado
  */
 ticketRouter.post('/tickets/:id/pagamento', (req, res) => {
   void TicketPagamentoController.processar(req, res);
 });
 
 export { ticketRouter };
-

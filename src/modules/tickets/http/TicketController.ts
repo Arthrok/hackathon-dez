@@ -4,14 +4,16 @@ import { BuscarTicketPorId } from '../application/BuscarTicketPorId';
 import { PgTicketRepository } from '../infra/PgTicketRepository';
 import { PgTicketTipoRepository } from '../infra/PgTicketTipoRepository';
 
+// Instantiation
 const ticketRepo = new PgTicketRepository();
 const tipoRepo = new PgTicketTipoRepository();
-const criarTicketUseCase = new CriarTicket(ticketRepo, tipoRepo);
+const criarTicketUseCase = new CriarTicket(tipoRepo);
 const buscarTicketUseCase = new BuscarTicketPorId(ticketRepo);
 
 export class TicketController {
   static async criar(req: Request, res: Response): Promise<void> {
-    const { tipoHoras, timestampEntrada, placaDoCarro } = req.body ?? {};
+    const { tipoHoras, timestampEntrada, placaDoCarro, usarCredito } = req.body ?? {};
+    const { id: userId } = req.user!; // from auth middleware
 
     if (!tipoHoras || typeof tipoHoras !== 'number' || ![1, 2, 3, 4].includes(tipoHoras)) {
       res.status(400).json({ message: 'Campo "tipoHoras" é obrigatório e deve ser 1, 2, 3 ou 4.' });
@@ -34,16 +36,16 @@ export class TicketController {
       return;
     }
 
-    if (!placaDoCarro || typeof placaDoCarro !== 'string' || placaDoCarro.trim().length === 0) {
-      res.status(400).json({ message: 'Campo "placaDoCarro" é obrigatório e deve ser string não vazia.' });
-      return;
-    }
+    // placaDoCarro validation moved primarily to UseCase or minimal check here (optional string)
+    // If not provided, it's undefined.
 
     try {
       const output = await criarTicketUseCase.executar({
+        userId,
         tipoHoras,
         timestampEntrada: timestampEntradaDate,
-        placaDoCarro: placaDoCarro.trim(),
+        placaDoCarro: placaDoCarro ? String(placaDoCarro).trim() : undefined,
+        usarCredito: !!usarCredito
       });
 
       res.status(201).json(output);
@@ -56,6 +58,7 @@ export class TicketController {
 
   static async buscarPorId(req: Request, res: Response): Promise<void> {
     const { id } = req.params;
+    const { id: userId } = req.user!;
 
     if (!id) {
       res.status(400).json({ message: 'Parâmetro "id" é obrigatório.' });
@@ -63,7 +66,7 @@ export class TicketController {
     }
 
     try {
-      const ticket = await buscarTicketUseCase.executar(id);
+      const ticket = await buscarTicketUseCase.executar(id, userId);
 
       if (!ticket) {
         res.status(404).json({ message: 'Ticket não encontrado.' });
@@ -78,4 +81,3 @@ export class TicketController {
     }
   }
 }
-

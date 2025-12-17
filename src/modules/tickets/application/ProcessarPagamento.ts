@@ -3,6 +3,7 @@ import { TicketPagamentoRepository } from '../domain/TicketPagamentoRepository';
 
 interface ProcessarPagamentoInput {
   ticketId: string;
+  userId: string;
   metodo?: string;
   idempotencyKey?: string;
 }
@@ -18,7 +19,7 @@ export class ProcessarPagamento {
   constructor(
     private readonly ticketRepo: TicketRepository,
     private readonly pagamentoRepo: TicketPagamentoRepository
-  ) {}
+  ) { }
 
   async executar(input: ProcessarPagamentoInput): Promise<ProcessarPagamentoOutput> {
     // Buscar ticket com lock
@@ -26,6 +27,10 @@ export class ProcessarPagamento {
 
     if (!ticket) {
       throw new Error('Ticket não encontrado.');
+    }
+
+    if (ticket.userId !== input.userId) {
+      throw new Error('Ticket não pertence ao usuário.');
     }
 
     if (ticket.status !== 'ABERTO') {

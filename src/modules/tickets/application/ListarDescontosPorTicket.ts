@@ -8,12 +8,12 @@ interface DescontoOutput {
 }
 
 export class ListarDescontosPorTicket {
-  constructor(private readonly repo: TicketDescontoRepository) {}
+  constructor(private readonly repo: TicketDescontoRepository) { }
 
   async executar(ticketId: string): Promise<DescontoOutput[]> {
-    const descontos = await this.repo.buscarPorTicketId(ticketId);
+    const descontos = await this.repo.listarPorTicket(ticketId);
 
-    return descontos.map((d) => ({
+    return descontos.map((d: any) => ({
       id: d.id,
       nfChave: d.nfChave,
       valorDesconto: d.valorDesconto,

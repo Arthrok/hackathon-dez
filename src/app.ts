@@ -7,6 +7,10 @@ import { notaFiscalRouter } from './modules/nota-fiscal/http/notaFiscal.routes';
 import { serproRouter } from './integrations/serpro/serpro.routes';
 import { ticketRouter } from './modules/tickets/http/ticket.routes';
 
+import { authRouter } from './modules/auth/AuthRoutes';
+import { userRouter } from './modules/users/UserRoutes';
+import { creditRouter } from './modules/creditos/CreditRoutes';
+
 const app: Application = express();
 
 app.use(json());
@@ -16,6 +20,10 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+app.use('/auth', authRouter);
+app.use('/', userRouter); // /me, /me/tickets
+app.use('/me', creditRouter); // /me/creditos via mounting
 
 app.use('/nota-fiscal', notaFiscalRouter);
 app.use('/integrations/serpro', serproRouter);

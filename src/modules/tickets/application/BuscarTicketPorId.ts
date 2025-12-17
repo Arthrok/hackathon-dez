@@ -13,12 +13,18 @@ interface BuscarTicketPorIdOutput {
 }
 
 export class BuscarTicketPorId {
-  constructor(private readonly repo: TicketRepository) {}
+  constructor(private readonly repo: TicketRepository) { }
 
-  async executar(id: string): Promise<BuscarTicketPorIdOutput | null> {
+  async executar(id: string, userId: string): Promise<BuscarTicketPorIdOutput | null> {
     const ticket = await this.repo.buscarPorId(id);
 
     if (!ticket) {
+      return null;
+    }
+
+    if (ticket.userId !== userId) {
+      // Return null or throw error depending on desired behavior. 
+      // User requested "só dono". Return null mimics "not found".
       return null;
     }
 

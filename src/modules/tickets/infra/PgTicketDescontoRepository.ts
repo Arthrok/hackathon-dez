@@ -1,44 +1,57 @@
-import { pool } from '../../../db/pg';
-import { TicketDescontoRepository, TicketDesconto } from '../domain/TicketDescontoRepository';
+import { Pool, PoolClient } from 'pg';
+import { pool } from '../../../shared/infra/db';
+import { TicketDescontoRepository } from '../domain/TicketDescontoRepository';
 
 export class PgTicketDescontoRepository implements TicketDescontoRepository {
-  async criar(desconto: Omit<TicketDesconto, 'id' | 'aplicadoEm'>): Promise<TicketDesconto> {
-    const query = `
-      INSERT INTO ticket_descontos (ticket_id, nf_chave, valor_desconto)
-      VALUES ($1, $2, $3)
-      RETURNING id, ticket_id, nf_chave, valor_desconto, aplicado_em
-    `;
+  private db: Pool | PoolClient;
 
-    const result = await pool.query(query, [desconto.ticketId, desconto.nfChave, desconto.valorDesconto]);
-
-    const row = result.rows[0];
-
-    return {
-      id: row.id,
-      ticketId: row.ticket_id,
-      nfChave: row.nf_chave,
-      valorDesconto: Number(row.valor_desconto),
-      aplicadoEm: new Date(row.aplicado_em),
-    };
+  constructor(db?: Pool | PoolClient) {
+    this.db = db || pool;
   }
 
-  async buscarPorTicketId(ticketId: string): Promise<TicketDesconto[]> {
+  async criar(dados: {
+    ticketId: string;
+    nfChave: string;
+    valorDesconto: number;
+    descontoCalculado: number;
+    descontoAplicadoNoTicket: number;
+    creditoGerado: number;
+  }): Promise<void> {
     const query = `
-      SELECT id, ticket_id, nf_chave, valor_desconto, aplicado_em
-      FROM ticket_descontos
+      INSERT INTO ticket_descontos (ticket_id, nf_chave, valor_desconto, desconto_calculado, desconto_aplicado_no_ticket, credito_gerado)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `;
+
+    const values = [
+      dados.ticketId,
+      dados.nfChave,
+      dados.valorDesconto, // Deprecated/Legacy field, keeping for compatibility or using applied amount
+      dados.descontoCalculado,
+      dados.descontoAplicadoNoTicket,
+      dados.creditoGerado
+    ];
+
+    await this.db.query(query, values);
+  }
+
+  async listarPorTicket(ticketId: string): Promise<any[]> {
+    const query = `
+      SELECT * FROM ticket_descontos
       WHERE ticket_id = $1
       ORDER BY aplicado_em DESC
     `;
-
-    const result = await pool.query(query, [ticketId]);
-
-    return result.rows.map((row) => ({
+    const result = await this.db.query(query, [ticketId]);
+    // Return rows directly or map to domain/DTO. For listing, DTO is fine.
+    return result.rows.map(row => ({
       id: row.id,
       ticketId: row.ticket_id,
       nfChave: row.nf_chave,
       valorDesconto: Number(row.valor_desconto),
-      aplicadoEm: new Date(row.aplicado_em),
+      // include new columns
+      descontoCalculado: Number(row.desconto_calculado ?? 0),
+      descontoAplicadoNoTicket: Number(row.desconto_aplicado_no_ticket ?? 0),
+      creditoGerado: Number(row.credito_gerado ?? 0),
+      aplicadoEm: new Date(row.aplicado_em)
     }));
   }
 }
-

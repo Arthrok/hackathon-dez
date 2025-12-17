@@ -83,3 +83,77 @@ CREATE TABLE IF NOT EXISTS ticket_pagamentos (
 
 CREATE INDEX IF NOT EXISTS idx_ticket_pagamentos_ticket_id ON ticket_pagamentos(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_pagamentos_idempotency_key ON ticket_pagamentos(idempotency_key);
+
+-- =========================================
+-- NOVAS TABELAS E ALTERAÇÕES (REFACTOR)
+-- =========================================
+
+-- 1) Tabela de usuários
+CREATE TABLE IF NOT EXISTS usuarios (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nome TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  celular TEXT NOT NULL,
+  cpf CHAR(11) NOT NULL UNIQUE,
+  -- placa_do_carro REMOVED
+  senha_hash TEXT NOT NULL,
+  credito_saldo NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  criado_em TIMESTAMPTZ DEFAULT now()
+);
+
+-- 1.5) Tabela de veículos do usuário
+CREATE TABLE IF NOT EXISTS usuarios_veiculos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES usuarios(id),
+  placa TEXT NOT NULL,
+  tipo TEXT NULL, -- carro, moto, caminhao
+  criado_em TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT uq_user_vehicle UNIQUE (user_id, placa)
+);
+
+-- 2) Alteração na tabela tickets para vincular usuário
+-- Adicionar coluna user_id se não existir
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tickets' AND column_name='user_id') THEN
+    ALTER TABLE tickets ADD COLUMN user_id UUID REFERENCES usuarios(id);
+    -- NOTA: Se houver dados pré-existentes, isso falharia se fosse NOT NULL direto. 
+    -- Para este hackathon, assumimos que podemos limpar ou que a migração roda em banco limpo.
+    -- Se necessário limpar: TRUNCATE tickets CASCADE;
+  END IF;
+END $$;
+
+-- Criar índice para user_id em tickets
+CREATE INDEX IF NOT EXISTS idx_tickets_user_id ON tickets(user_id);
+
+-- 3) Tabela de movimentos de crédito
+CREATE TABLE IF NOT EXISTS creditos_movimentos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES usuarios(id),
+  tipo TEXT NOT NULL CHECK (tipo IN ('CREDITO_MANUAL', 'CREDITO_SOBRA_DESCONTO', 'USO_CREDITO_NO_TICKET')),
+  valor NUMERIC(12, 2) NOT NULL,
+  direcao TEXT NOT NULL CHECK (direcao IN ('ENTRADA', 'SAIDA')),
+  referencia_ticket_id UUID NULL REFERENCES tickets(id),
+  referencia_nf_chave CHAR(44) NULL REFERENCES notas_fiscais(chave),
+  descricao TEXT NULL,
+  criado_em TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_creditos_movimentos_user_id ON creditos_movimentos(user_id, criado_em DESC);
+
+-- 4) Alteração na tabela ticket_descontos
+-- Adicionar colunas novas se não existirem
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ticket_descontos' AND column_name='desconto_calculado') THEN
+    ALTER TABLE ticket_descontos ADD COLUMN desconto_calculado NUMERIC(12, 2) NOT NULL DEFAULT 0;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ticket_descontos' AND column_name='desconto_aplicado_no_ticket') THEN
+    ALTER TABLE ticket_descontos ADD COLUMN desconto_aplicado_no_ticket NUMERIC(12, 2) NOT NULL DEFAULT 0;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='ticket_descontos' AND column_name='credito_gerado') THEN
+    ALTER TABLE ticket_descontos ADD COLUMN credito_gerado NUMERIC(12, 2) NOT NULL DEFAULT 0;
+  END IF;
+END $$;

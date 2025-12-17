@@ -39,6 +39,7 @@ export class TicketPagamentoController {
     const { id } = req.params;
     const { metodo } = req.body ?? {};
     const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+    const { id: userId } = req.user!;
 
     if (!id) {
       res.status(400).json({ message: 'Parâmetro "id" é obrigatório.' });
@@ -53,6 +54,7 @@ export class TicketPagamentoController {
     try {
       const output = await processarPagamentoUseCase.executar({
         ticketId: id,
+        userId,
         metodo: metodo ?? undefined,
         idempotencyKey: idempotencyKey ?? undefined,
       });

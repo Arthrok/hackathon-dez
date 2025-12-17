@@ -14,6 +14,7 @@ export interface TicketProps {
 
 export class Ticket {
   public readonly id: string;
+  public readonly userId: string;
   public readonly tipoId: string;
   public readonly status: TicketStatus;
   public readonly valorOriginal: number;
@@ -23,8 +24,9 @@ export class Ticket {
   public readonly placaDoCarro: string;
   public readonly criadoEm: Date;
 
-  private constructor(props: TicketProps) {
+  private constructor(props: TicketProps & { userId: string }) {
     this.id = props.id;
+    this.userId = props.userId;
     this.tipoId = props.tipoId;
     this.status = props.status;
     this.valorOriginal = props.valorOriginal;
@@ -37,6 +39,7 @@ export class Ticket {
 
   static create(params: {
     id: string;
+    userId: string;
     tipoId: string;
     valorOriginal: number;
     timestampEntrada: Date;
@@ -58,6 +61,7 @@ export class Ticket {
 
     return new Ticket({
       id: params.id,
+      userId: params.userId,
       tipoId: params.tipoId,
       status: 'ABERTO',
       valorOriginal: params.valorOriginal,
@@ -69,7 +73,7 @@ export class Ticket {
     });
   }
 
-  static reconstruir(props: TicketProps): Ticket {
+  static reconstruir(props: TicketProps & { userId: string }): Ticket {
     return new Ticket(props);
   }
 

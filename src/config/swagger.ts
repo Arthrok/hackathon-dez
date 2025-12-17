@@ -20,13 +20,29 @@ const options: swaggerJSDoc.Options = {
         description: 'Servidor Local',
       },
     ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
   },
   apis: [
     path.join(__dirname, '../modules/**/*.routes.ts'),
+    path.join(__dirname, '../modules/**/*Routes.ts'),
     path.join(__dirname, '../integrations/**/*.routes.ts'),
-    path.join(__dirname, '../modules/**/*.routes.js'), // Para suportar build
-    path.join(__dirname, '../integrations/**/*.routes.js')
-  ], 
+    path.join(__dirname, '../modules/**/*.routes.js'),
+    path.join(__dirname, '../modules/**/*Routes.js'),
+    path.join(__dirname, '../integrations/**/*.routes.js'),
+  ],
 };
 
 export const swaggerSpec = swaggerJSDoc(options);
