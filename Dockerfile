@@ -4,7 +4,11 @@ WORKDIR /usr/src/app
 
 COPY package.json package-lock.json* ./
 
-RUN npm install
+
+# Force development env for build
+ENV NODE_ENV=development
+
+RUN npm ci
 
 COPY tsconfig.json ./tsconfig.json
 COPY src ./src
