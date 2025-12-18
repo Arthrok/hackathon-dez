@@ -62,7 +62,7 @@ export class SerproClient {
         throw error;
       }
 
-      const error: SerproError = new Error('Erro de rede ao chamar SERPRO.');
+      const error: SerproError = new Error(`Erro de rede ao chamar SERPRO: ${err?.message || err}`);
       error.status = 502;
       throw error;
     } finally {

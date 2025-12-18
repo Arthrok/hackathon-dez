@@ -53,7 +53,8 @@ export class TicketDescontoController {
       }
 
       if (error.status === 502) {
-        res.status(502).json({ message: 'Erro ao consultar SERPRO. Tente novamente mais tarde.' });
+        // Expose the underlying error message (e.g. from SerproClient) for debugging
+        res.status(502).json({ message: error.message || 'Erro ao consultar SERPRO. Tente novamente mais tarde.' });
         return;
       }
 
