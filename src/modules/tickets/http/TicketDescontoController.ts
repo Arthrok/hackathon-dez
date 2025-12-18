@@ -14,14 +14,8 @@ const listarDescontosUseCase = new ListarDescontosPorTicket(descontoRepo);
 
 export class TicketDescontoController {
   static async aplicar(req: Request, res: Response): Promise<void> {
-    const { id } = req.params;
     const { chave } = req.body ?? {};
     const { id: userId } = req.user!;
-
-    if (!id) {
-      res.status(400).json({ message: 'Parâmetro "id" é obrigatório.' });
-      return;
-    }
 
     if (!chave || typeof chave !== 'string' || chave.length !== 44) {
       res.status(400).json({ message: 'Campo "chave" é obrigatório e deve ter 44 caracteres.' });
@@ -30,7 +24,6 @@ export class TicketDescontoController {
 
     try {
       const output = await aplicarDescontoUseCase.executar({
-        ticketId: id,
         chaveNf: chave,
         userId: userId
       });

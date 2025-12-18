@@ -9,5 +9,6 @@ export interface TicketRepository {
   // New methods
   listarPorUsuario(userId: string, params: { status?: string, limit: number, offset: number }): Promise<Ticket[]>;
   buscarAtivoPorUsuario(userId: string): Promise<Ticket | null>;
+  excluir(ticketId: string): Promise<void>;
 }
 

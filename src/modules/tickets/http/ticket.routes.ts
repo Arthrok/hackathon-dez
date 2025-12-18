@@ -96,20 +96,33 @@ ticketRouter.get('/tickets/:id', (req, res) => {
   void TicketController.buscarPorId(req, res);
 });
 
+
 /**
  * @swagger
- * /tickets/{id}/descontos:
- *   post:
- *     summary: Aplica desconto via Nota Fiscal
+ * /tickets/ativo:
+ *   delete:
+ *     summary: Exclui o ticket ativo do usuário
  *     tags: [Tickets]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
+ *     responses:
+ *       204:
+ *         description: Ticket excluído
+ *       404:
+ *         description: Nenhum ticket ativo
+ */
+ticketRouter.delete('/tickets/ativo', (req, res) => {
+  void TicketController.deletarAtivo(req, res);
+});
+
+/**
+ * @swagger
+ * /tickets/descontos:
+ *   post:
+ *     summary: Aplica cashback via Nota Fiscal no ticket ativo
+ *     tags: [Tickets]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -123,13 +136,13 @@ ticketRouter.get('/tickets/:id', (req, res) => {
  *                 example: "53160911510448000171550010000106771000187760"
  *     responses:
  *       201:
- *         description: Desconto aplicado com sucesso
+ *         description: Cashback aplicado com sucesso
  *       400:
- *         description: CEP inválido ou regra de negócio
+ *         description: CEP inválido, regra de negócio ou sem ticket ativo
  *       409:
  *         description: NF já usada ou data inválida
  */
-ticketRouter.post('/tickets/:id/descontos', (req, res) => {
+ticketRouter.post('/tickets/descontos', (req, res) => {
   void TicketDescontoController.aplicar(req, res);
 });
 

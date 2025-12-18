@@ -2,14 +2,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
-COPY package.json package-lock.json* ./
-
+COPY package.json ./
 
 # Force development env for build
 ENV NODE_ENV=development
 
 RUN npm install
-RUN npm install -g typescript
 
 COPY tsconfig.json ./tsconfig.json
 COPY src ./src

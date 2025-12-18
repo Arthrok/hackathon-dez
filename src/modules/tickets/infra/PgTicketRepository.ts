@@ -108,6 +108,10 @@ export class PgTicketRepository implements TicketRepository {
     return this.mapRowToTicket(result.rows[0]);
   }
 
+  async excluir(ticketId: string): Promise<void> {
+    await this.db.query('DELETE FROM tickets WHERE id = $1', [ticketId]);
+  }
+
   private mapRowToTicket(row: any): Ticket {
     // Note: Ticket.reconstruir expects userId now.
     return Ticket.reconstruir({

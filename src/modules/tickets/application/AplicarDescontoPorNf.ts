@@ -19,7 +19,6 @@ import { Ticket } from '../domain/Ticket';
 import { v4 as uuidV4 } from 'uuid';
 
 interface AplicarDescontoPorNfInput {
-  ticketId: string;
   chaveNf: string;
   userId: string; // From auth, to ensure ownership and credit limit
 }
@@ -63,24 +62,31 @@ export class AplicarDescontoPorNf {
       const userRepo = new PgUserRepository(client);
       const creditRepo = new PgCreditRepository(client);
 
-      // 2. Lock Ticket
-      const ticket = await ticketRepo.buscarPorIdComLock(input.ticketId);
-      if (!ticket) throw new Error('Ticket não encontrado.');
+      // 2. Lock User (to ensure we can check active ticket and update balance safely)
+      // Actually, to check active ticket we query tickets. 
+      // User requested "assuma que sempre vá ter apenas um ticket ativo". 
+      // We should look for it. Use ticketRepo.buscarAtivoPorUsuario.
 
-      if (ticket.userId !== input.userId) {
-        throw new Error('Ticket não pertence ao usuário.');
+      // We need to associate the NF usage to a ticket? Yes, usually.
+
+      const ticket = await ticketRepo.buscarAtivoPorUsuario(input.userId);
+      if (!ticket) {
+        throw new Error('Nenhum ticket ativo encontrado para este usuário.');
       }
 
-      if (ticket.status !== 'ABERTO') {
-        throw new Error('Ticket deve estar ABERTO para aplicar desconto.');
+      // We prefer to lock the ticket row to prevent concurrent updates on it (e.g. paying/cancelling while applying cashback)
+      // Re-fetch with lock using ID from the found active ticket.
+      const ticketLocked = await ticketRepo.buscarPorIdComLock(ticket.id);
+      if (!ticketLocked || ticketLocked.status !== 'ABERTO') {
+        throw new Error('Ticket não está mais ativo/aberto.');
       }
 
       // 3. Validation
       const cepAtivo = await cepRepo.verificarSeAtivo(dadosNf.cepDestinatario);
       if (!cepAtivo) throw new Error(`CEP ${dadosNf.cepDestinatario} não está ativo no sistema SCS.`);
 
-      if (dadosNf.timestampNota < ticket.timestampEntrada || dadosNf.timestampNota > ticket.timestampSaida) {
-        throw new Error('Timestamp da nota fiscal está fora do intervalo do ticket (entrada/saída).');
+      if (dadosNf.timestampNota < ticketLocked.timestampEntrada || dadosNf.timestampNota > ticketLocked.timestampSaida) {
+        throw new Error(`Timestamp da nota fiscal (${dadosNf.timestampNota.toISOString()}) está fora do intervalo do ticket (${ticketLocked.timestampEntrada.toISOString()} - ${ticketLocked.timestampSaida.toISOString()}).`);
       }
 
       // 4. NF Idempotency
@@ -95,62 +101,34 @@ export class AplicarDescontoPorNf {
         chave: dadosNf.chave,
         payload: dadosNf.payload
       });
-      // Legacy mark used logic might be redundant if we check intersection with `ticket_descontos`, 
-      // but let's update `usado_ticket_id` for consistency.
-      await nfRepo.marcarComoUsada(input.chaveNf, ticket.id);
+      await nfRepo.marcarComoUsada(input.chaveNf, ticketLocked.id);
 
 
-      // 5. Calculate Discount
-      let descontoCalculado = Math.round(dadosNf.valorTotal * this.PERCENTUAL_DESCONTO * 100) / 100;
-      descontoCalculado = Math.min(descontoCalculado, this.LIMIT_DESCONTO);
+      // 5. Calculate Cashback (5% max 20.00)
+      let cashbackCalculado = Math.round(dadosNf.valorTotal * this.PERCENTUAL_DESCONTO * 100) / 100;
+      cashbackCalculado = Math.min(cashbackCalculado, this.LIMIT_DESCONTO);
 
-      const valorTicketAntes = ticket.valorAtual;
-      const descontoAplicadoNoTicket = Math.min(descontoCalculado, valorTicketAntes);
-      const creditoGerado = Math.round((descontoCalculado - descontoAplicadoNoTicket) * 100) / 100;
+      // ticket is pre-paid, so we DO NOT reduce ticket value. 
+      // We Just add credit to user.
+      const descontoAplicadoNoTicket = 0; // Explicitly 0
+      const creditoGerado = cashbackCalculado; // Full amount is cashback
 
-      // 6. Update Ticket
-      const ticketAtualizado = ticket.aplicarDesconto(descontoAplicadoNoTicket);
-      // We need to persist the updated ticket. 
-      // Entity has logic to reduce value.
-      await ticketRepo.atualizar(ticketAtualizado);
+      // 6. Update Ticket? No change in values.
+      // But we might want to log this "discount" in ticket_descontos table.
 
-      // 7. Insert Discount Record
+      // 7. Insert Discount Record (keeping table name 'ticket_descontos' but treating as cashback record)
       await descontoRepo.criar({
-        ticketId: ticket.id,
+        ticketId: ticketLocked.id,
         nfChave: input.chaveNf,
-        valorDesconto: descontoAplicadoNoTicket, // Legacy semantic
-        descontoCalculado,
-        descontoAplicadoNoTicket,
+        valorDesconto: 0, // No discount on ticket
+        descontoCalculado: cashbackCalculado,
+        descontoAplicadoNoTicket: 0,
         creditoGerado
       });
 
       // 8. Handle Cashback
       if (creditoGerado > 0) {
-        // Lock User ? Not strictly mandatory for increment if using UPDATE set balance = balance + val via repo
-        // But our repo `atualizarSaldo` sets absolute value.
-        // So we MUST fetch user to get current balance and update.
-        // Or create `incrementarSaldo` method.
-        // Since we didn't add `incrementarSaldo`, we do fetch + set.
-        // To be safe against race condition on balance, LOCK user.
-        // Is deadlock possible? Ticket Locked -> User Locked.
-        // CriarTicket: User Locked -> Ticket Inserted.
-        // Assume CreateTicket locks user THEN inserts ticket (doesn't lock ticket).
-        // Here we lock ticket THEN user.
-        // If CreateTicket locks User (T1) and waits for something?
-        // CreateTicket doesn't wait for Ticket Lock because it creates new ticket.
-        // Is there any flow that locks User then Ticket?
-        // Creating Ticket locks User.
-        // Applying Discount Locks Ticket.
-        // No overlap on same Ticket instance (Create is new).
-        // What if user creating ticket and applying discount on ANOTHER ticket same time?
-        // T1 (Create): Lock User.
-        // T2 (Discount): Lock Ticket A -> Lock User.
-        // T2 will wait for T1.
-        // T1 proceeds (Create Ticket B). Does T1 lock Ticket A? No.
-        // T1 finishes. T2 proceeds.
-        // SAFE.
-
-        const user = await userRepo.buscarPorIdComLock(ticket.userId);
+        const user = await userRepo.buscarPorIdComLock(ticketLocked.userId);
         if (user) {
           const novoSaldo = Number(user.creditoSaldo) + creditoGerado;
           await userRepo.atualizarSaldo(user.id, novoSaldo);
@@ -158,12 +136,12 @@ export class AplicarDescontoPorNf {
           await creditRepo.criar(CreditMovement.criar({
             id: uuidV4(),
             userId: user.id,
-            tipo: 'CREDITO_SOBRA_DESCONTO',
+            tipo: 'CREDITO_SOBRA_DESCONTO', // Reuse type or create new? 'CREDITO_CASHBACK_NF' matches intention better? Reuse for now or string.
             valor: creditoGerado,
             direcao: 'ENTRADA',
-            referenciaTicketId: ticket.id,
+            referenciaTicketId: ticketLocked.id,
             referenciaNfChave: input.chaveNf,
-            descricao: `Sobra de desconto NF ${input.chaveNf}`,
+            descricao: `Cashback NF ${input.chaveNf}`,
             criadoEm: new Date()
           }));
         }
@@ -172,13 +150,13 @@ export class AplicarDescontoPorNf {
       await client.query('COMMIT');
 
       return {
-        ticketId: ticket.id,
+        ticketId: ticketLocked.id,
         nfChave: input.chaveNf,
         valorNf: dadosNf.valorTotal,
-        descontoAplicado: descontoAplicadoNoTicket,
+        descontoAplicado: 0,
         creditoGerado,
-        valorTicketAntes,
-        valorTicketDepois: ticketAtualizado.valorAtual,
+        valorTicketAntes: ticketLocked.valorAtual,
+        valorTicketDepois: ticketLocked.valorAtual,
       };
 
     } catch (e) {

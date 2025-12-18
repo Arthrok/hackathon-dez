@@ -101,25 +101,42 @@ describe('Integracao: Ciclo de Vida do Ticket', () => {
         expect(response.body.id).toBe(ticketPositiveId);
     });
 
-    it('Deve aplicar desconto no ticket (Fluxo Positivo)', async () => {
+    it('Deve aplicar cashback via NF no ticket ativo (Fluxo Positivo)', async () => {
+        // Initial credit check
+        const userRes = await request(app)
+            .get('/me')
+            .set('Authorization', `Bearer ${token}`);
+        const initialBalance = Number(userRes.body.creditoSaldo);
+
+        // Apply Cashback
         const response = await request(app)
-            .post(`/tickets/${ticketPositiveId}/descontos`)
+            .post('/tickets/descontos')
             .set('Authorization', `Bearer ${token}`)
             .send({ chave: CHAVE_CENARIO_POSITIVO });
+
         expect(response.status).toBe(201);
-        expect(response.body.descontoAplicado).toBe(5);
+        expect(response.body.ticketId).toBe(ticketPositiveId);
+        expect(response.body.creditoGerado).toBe(5); // 5% of 100.00
+        expect(response.body.descontoAplicado).toBe(0); // No discount on ticket
     });
 
-    it('Deve verificar que o valor do ticket foi atualizado após desconto', async () => {
+    it('Deve verificar que o valor do ticket NÃO mudou e crédito aumentou', async () => {
         // Verification Step: GET /tickets/:id
         const response = await request(app)
             .get(`/tickets/${ticketPositiveId}`)
             .set('Authorization', `Bearer ${token}`);
 
         expect(response.status).toBe(200);
-        // Original: 11.50. Discount: 5.00. Current: 6.50.
-        // Explicit check as requested
-        expect(Number(response.body.valorAtual)).toBe(6.5);
+        // Original: 11.50. Cashback model: 11.50 remains.
+        expect(Number(response.body.valorAtual)).toBe(11.5);
+
+        // Verify Credit Balance
+        const userRes = await request(app)
+            .get('/me')
+            .set('Authorization', `Bearer ${token}`);
+        // Default 0 start + 5 cashback = 5. (Or previous balance + 5)
+        // Since we truncate tables, start is 0.
+        expect(Number(userRes.body.creditoSaldo)).toBe(5.00);
     });
 
     it('Deve processar o pagamento do ticket', async () => {
@@ -132,28 +149,68 @@ describe('Integracao: Ciclo de Vida do Ticket', () => {
     });
 
     it('Deve verificar status e valores finais após pagamento', async () => {
-        // Verification Step: GET /tickets/:id (Main Resource) + GET /pagamento if needed
         const response = await request(app)
             .get(`/tickets/${ticketPositiveId}`)
             .set('Authorization', `Bearer ${token}`);
 
         expect(response.status).toBe(200);
         expect(response.body.status).toBe('PAGO');
-        expect(Number(response.body.valorAtual)).toBe(6.5); // Should remain the paid amount
+        expect(Number(response.body.valorAtual)).toBe(11.5);
 
-        // Also verify the specific payment endpoint if business rule requires it
         const paymentRes = await request(app)
             .get(`/tickets/${ticketPositiveId}/pagamento`)
             .set('Authorization', `Bearer ${token}`);
         expect(paymentRes.body.status).toBe('PAGO');
     });
 
+    it('Deve excluir ticket ativo (se houver novo)', async () => {
+        // Create new active ticket
+        const createRes = await request(app)
+            .post('/tickets')
+            .set('Authorization', `Bearer ${token}`)
+            .send({
+                tipoHoras: 1,
+                timestampEntrada: '2016-09-11T12:00:00-03:00',
+                usarCredito: false
+            });
+        expect(createRes.status).toBe(201);
+
+        // Delete it
+        const delRes = await request(app)
+            .delete('/tickets/ativo')
+            .set('Authorization', `Bearer ${token}`);
+        expect(delRes.status).toBe(204);
+
+        // Verify it is gone (active)
+        const getRes = await request(app)
+            .get('/me/tickets/ativo')
+            .set('Authorization', `Bearer ${token}`);
+        expect(getRes.status).toBe(200);
+        expect(getRes.body).toBe(null); // or empty body depending on implementation, usually 204 or null
+    });
+
     it('Não deve permitir reutilizar a mesma NF no mesmo ticket', async () => {
+        // Re-create active ticket to try reusing NF on it (or same ticket logic if we didn't pay/close it?)
+        // The previous test PAID the ticketPositiveId, so it's closed.
+        // The 'reutilizar' check usually runs on an active ticket.
+        // Let's create a new one.
+
+        const createRes = await request(app)
+            .post('/tickets')
+            .set('Authorization', `Bearer ${token}`)
+            .send({
+                tipoHoras: 2,
+                timestampEntrada: '2016-09-11T11:00:00-03:00',
+                usarCredito: false
+            });
+        const newTicketId = createRes.body.id;
+
         const response = await request(app)
-            .post(`/tickets/${ticketPositiveId}/descontos`)
+            .post('/tickets/descontos') // No ID
             .set('Authorization', `Bearer ${token}`)
             .send({ chave: CHAVE_CENARIO_POSITIVO });
-        expect(response.status).toBe(409);
+
+        expect(response.status).toBe(409); // Already used
     });
 
     // --- Negative Flow (New Ticket) ---
@@ -172,9 +229,9 @@ describe('Integracao: Ciclo de Vida do Ticket', () => {
         ticketNegativeId = response.body.id;
     });
 
-    it('Não deve aplicar desconto se data da NF estiver fora do intervalo', async () => {
+    it('Não deve aplicar desconto se data da NF estiver fora do intervalo (usando ticket ativo)', async () => {
         const response = await request(app)
-            .post(`/tickets/${ticketNegativeId}/descontos`)
+            .post('/tickets/descontos')
             .set('Authorization', `Bearer ${token}`)
             .send({ chave: CHAVE_CENARIO_DATA_INVALIDA });
         expect(response.status).toBe(409);
@@ -182,7 +239,7 @@ describe('Integracao: Ciclo de Vida do Ticket', () => {
 
     it('Não deve aplicar desconto se CEP for inválido/inativo', async () => {
         const response = await request(app)
-            .post(`/tickets/${ticketNegativeId}/descontos`)
+            .post('/tickets/descontos')
             .set('Authorization', `Bearer ${token}`)
             .send({ chave: CHAVE_CENARIO_CEP_INVALIDO });
         expect(response.status).toBe(400);
