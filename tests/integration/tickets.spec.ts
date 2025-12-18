@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/app';
 import { Pool } from 'pg';
@@ -54,6 +54,8 @@ describe('Integracao: Ciclo de Vida do Ticket', () => {
         await pool.query("INSERT INTO ceps_scs (cep, ativo) VALUES ('12345678', true) ON CONFLICT (cep) DO NOTHING");
         await pool.end();
     });
+
+    // afterEach removed to preserve User state for sequential tests
 
     // --- Authentication ---
     it('Deve registrar um novo usuario', async () => {
